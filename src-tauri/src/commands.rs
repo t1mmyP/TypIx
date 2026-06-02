@@ -17,10 +17,12 @@ pub fn accept_correction<R: Runtime>(
         let _ = window.hide();
     }
 
-    // Paste after focus has returned to the source app.
-    std::thread::spawn(|| {
+    // Paste on the main thread after focus returns to the source app.
+    std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(150));
-        crate::simulate_paste();
+        let _ = app.run_on_main_thread(|| {
+            crate::simulate_paste();
+        });
     });
 
     Ok(())

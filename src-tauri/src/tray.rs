@@ -18,7 +18,7 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "correct" => crate::trigger_correction(app),
             "settings" => crate::open_settings(app),
-            "quit" => app.exit(0),
+            "quit" => std::process::exit(0),
             _ => {}
         })
         .build(app)?;

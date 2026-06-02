@@ -35,7 +35,10 @@ pub async fn correct_text(
         (s.selected_model.clone(), prompt)
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?;
     let body = serde_json::json!({
         "model": model,
         "system": system_prompt,

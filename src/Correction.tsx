@@ -131,11 +131,10 @@ export default function Correction() {
     <div className="d4-wrap">
       <div className="d4" style={{ width: panelWidth }}>
 
-        {/* ── Idle: zentrierte Dots ── */}
+        {/* ── Idle: Hinweis dass kein Text erfasst wurde ── */}
         {isIdle && (
           <div className="d4-idle">
-            <span className="dots d4-dots"><i /><i /><i /></span>
-            <p>TypIx korrigiert deinen Text…</p>
+            <p>Text auswählen, dann Shortcut drücken.</p>
             <span className="modelchip"><span className="led" />{model}</span>
           </div>
         )}

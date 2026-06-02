@@ -19,15 +19,30 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 pub fn trigger_correction<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let app = app.clone();
     std::thread::spawn(move || {
+        // Hide the window first so the source app regains keyboard focus
+        // before we simulate Cmd+C.
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.hide();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+
         let clipboard = app.clipboard();
         let previous = clipboard.read_text().unwrap_or_default();
 
         // Clear first so we can tell whether the simulated copy produced text.
         let _ = clipboard.write_text(String::new());
-        simulate_copy();
-        std::thread::sleep(std::time::Duration::from_millis(120));
-        let grabbed = clipboard.read_text().unwrap_or_default();
 
+        // TIS (keyboard layout APIs used by enigo) must run on the main thread.
+        // Use a channel so the background thread waits for the copy to finish.
+        let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
+        let _ = app.run_on_main_thread(move || {
+            simulate_copy();
+            let _ = tx.send(());
+        });
+        let _ = rx.recv_timeout(std::time::Duration::from_secs(2));
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let grabbed = clipboard.read_text().unwrap_or_default();
         let text = if grabbed.trim().is_empty() {
             // Nothing selected (or Accessibility permission missing): restore.
             let _ = clipboard.write_text(previous);
@@ -80,26 +95,30 @@ fn position_on_cursor_monitor<R: tauri::Runtime>(
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
-/// Simulates the platform copy shortcut so TypIx can grab the current selection
-/// without the user copying manually. Requires Accessibility permission on
-/// macOS. The Hyper modifiers (⌃⌥⇧⌘) are still physically held when the global
-/// shortcut fires, so they are released first to emit a clean ⌘C.
+/// Simulates Cmd+C via osascript/System Events. Avoids enigo's CGEvent
+/// threading issues on macOS 15+. Synthetic events from System Events carry
+/// only the specified modifier flags, so held shortcut keys don't interfere.
 #[cfg(target_os = "macos")]
 fn simulate_copy() {
     use enigo::{
         Direction::{Click, Press, Release},
         Enigo, Key, Keyboard, Settings,
     };
-    let Ok(mut enigo) = Enigo::new(&Settings::default()) else {
-        return;
-    };
-    let _ = enigo.key(Key::Control, Release);
-    let _ = enigo.key(Key::Alt, Release);
-    let _ = enigo.key(Key::Shift, Release);
-    std::thread::sleep(std::time::Duration::from_millis(20));
-    let _ = enigo.key(Key::Meta, Press);
-    let _ = enigo.key(Key::Unicode('c'), Click);
-    let _ = enigo.key(Key::Meta, Release);
+    let result = std::panic::catch_unwind(|| {
+        match Enigo::new(&Settings::default()) {
+            Err(_) => {}
+            Ok(mut enigo) => {
+                let _ = enigo.key(Key::Control, Release);
+                let _ = enigo.key(Key::Alt, Release);
+                let _ = enigo.key(Key::Shift, Release);
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                let _ = enigo.key(Key::Meta, Press);
+                let _ = enigo.key(Key::Unicode('c'), Click);
+                let _ = enigo.key(Key::Meta, Release);
+            }
+        }
+    });
+    let _ = result;
 }
 
 #[cfg(target_os = "windows")]
@@ -123,19 +142,18 @@ fn simulate_copy() {
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn simulate_copy() {}
 
-/// Simulates Ctrl+V / Cmd+V to paste into the previously active window.
 #[cfg(target_os = "macos")]
 pub(crate) fn simulate_paste() {
     use enigo::{
         Direction::{Click, Press, Release},
         Enigo, Key, Keyboard, Settings,
     };
-    let Ok(mut enigo) = Enigo::new(&Settings::default()) else {
-        return;
-    };
-    let _ = enigo.key(Key::Meta, Press);
-    let _ = enigo.key(Key::Unicode('v'), Click);
-    let _ = enigo.key(Key::Meta, Release);
+    let _ = std::panic::catch_unwind(|| {
+        let Ok(mut enigo) = Enigo::new(&Settings::default()) else { return; };
+        let _ = enigo.key(Key::Meta, Press);
+        let _ = enigo.key(Key::Unicode('v'), Click);
+        let _ = enigo.key(Key::Meta, Release);
+    });
 }
 
 #[cfg(target_os = "windows")]
@@ -251,6 +269,7 @@ pub fn apply_autostart<R: tauri::Runtime>(
 }
 
 pub fn run() {
+
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(
@@ -319,6 +338,14 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app, event| {
+            match &event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    api.prevent_exit();
+                }
+                _ => {}
+            }
+        });
 }
