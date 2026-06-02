@@ -1,0 +1,254 @@
+mod ollama;
+mod settings;
+mod tray;
+
+use settings::AppState;
+use std::sync::Mutex;
+use tauri::{Emitter, Manager};
+use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+/// Grabs the user's current selection by simulating a copy, reads it from the
+/// clipboard, and shows the warm main window with it. Triggered by the global
+/// shortcut and the tray menu.
+///
+/// Runs off-thread so the shortcut handler returns immediately and the copy is
+/// sent while the *source* app is still frontmost (before our window appears).
+pub fn trigger_correction<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let clipboard = app.clipboard();
+        let previous = clipboard.read_text().unwrap_or_default();
+
+        // Clear first so we can tell whether the simulated copy produced text.
+        let _ = clipboard.write_text(String::new());
+        simulate_copy();
+        std::thread::sleep(std::time::Duration::from_millis(120));
+        let grabbed = clipboard.read_text().unwrap_or_default();
+
+        let text = if grabbed.trim().is_empty() {
+            // Nothing selected (or Accessibility permission missing): restore.
+            let _ = clipboard.write_text(previous);
+            String::new()
+        } else {
+            grabbed
+        };
+
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.emit("correct-request", text);
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    });
+}
+
+/// Simulates the platform copy shortcut so TypIx can grab the current selection
+/// without the user copying manually. Requires Accessibility permission on
+/// macOS. The Hyper modifiers (⌃⌥⇧⌘) are still physically held when the global
+/// shortcut fires, so they are released first to emit a clean ⌘C.
+#[cfg(target_os = "macos")]
+fn simulate_copy() {
+    use enigo::{
+        Direction::{Click, Press, Release},
+        Enigo, Key, Keyboard, Settings,
+    };
+    let Ok(mut enigo) = Enigo::new(&Settings::default()) else {
+        return;
+    };
+    let _ = enigo.key(Key::Control, Release);
+    let _ = enigo.key(Key::Alt, Release);
+    let _ = enigo.key(Key::Shift, Release);
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let _ = enigo.key(Key::Meta, Press);
+    let _ = enigo.key(Key::Unicode('c'), Click);
+    let _ = enigo.key(Key::Meta, Release);
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_copy() {
+    use enigo::{
+        Direction::{Click, Press, Release},
+        Enigo, Key, Keyboard, Settings,
+    };
+    let Ok(mut enigo) = Enigo::new(&Settings::default()) else {
+        return;
+    };
+    let _ = enigo.key(Key::Shift, Release);
+    let _ = enigo.key(Key::Alt, Release);
+    let _ = enigo.key(Key::Meta, Release);
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let _ = enigo.key(Key::Control, Press);
+    let _ = enigo.key(Key::Unicode('c'), Click);
+    let _ = enigo.key(Key::Control, Release);
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn simulate_copy() {}
+
+/// Opens (or focuses) the Settings window. Created on demand and routed by its
+/// window label in the frontend; it shares the same bundle as the main window.
+///
+/// While Settings is open the global shortcut is suspended, so recording a new
+/// shortcut never triggers a correction. It is restored (from the latest saved
+/// settings) once the window is destroyed.
+pub fn open_settings<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+
+    match tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("TypIx – Einstellungen")
+    .inner_size(440.0, 430.0)
+    .min_inner_size(380.0, 360.0)
+    .resizable(true)
+    .focused(true)
+    .center()
+    .build()
+    {
+        Ok(window) => {
+            let _ = app.global_shortcut().unregister_all();
+
+            // macOS: become a regular app while Settings is open so the window
+            // reliably comes to the front and can take keyboard focus.
+            #[cfg(target_os = "macos")]
+            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+
+            let app_handle = app.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    // Restore menu-bar-only mode and the global shortcut.
+                    #[cfg(target_os = "macos")]
+                    let _ = app_handle
+                        .set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                    let shortcut = app_handle
+                        .state::<AppState>()
+                        .settings
+                        .lock()
+                        .unwrap()
+                        .shortcut
+                        .clone();
+                    if let Ok(sc) = shortcut.parse::<Shortcut>() {
+                        let _ = app_handle.global_shortcut().register(sc);
+                    }
+                }
+            });
+
+            let _ = window.set_focus();
+        }
+        Err(e) => eprintln!("Settings-Fenster konnte nicht geöffnet werden: {e}"),
+    }
+}
+
+/// Registers `new` and unregisters `old`. New is registered first so that a
+/// failure (e.g. an invalid or conflicting combo) leaves the old one intact.
+pub fn apply_shortcut<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    old: &str,
+    new: &str,
+) -> Result<(), String> {
+    let new_sc = new
+        .parse::<Shortcut>()
+        .map_err(|e| format!("Ungültiger Shortcut: {e}"))?;
+    app.global_shortcut()
+        .register(new_sc)
+        .map_err(|e| format!("Shortcut konnte nicht registriert werden: {e}"))?;
+    if !old.is_empty() && old != new {
+        if let Ok(old_sc) = old.parse::<Shortcut>() {
+            let _ = app.global_shortcut().unregister(old_sc);
+        }
+    }
+    Ok(())
+}
+
+/// Enables or disables launch-on-login via the autostart plugin.
+pub fn apply_autostart<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    enable: bool,
+) -> Result<(), String> {
+    let manager = app.autolaunch();
+    if enable {
+        manager.enable().map_err(|e| e.to_string())
+    } else {
+        manager.disable().map_err(|e| e.to_string())
+    }
+}
+
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        crate::trigger_correction(app);
+                    }
+                })
+                .build(),
+        )
+        .invoke_handler(tauri::generate_handler![
+            ollama::correct_text,
+            settings::get_settings,
+            settings::set_settings,
+        ])
+        .setup(|app| {
+            let handle = app.handle().clone();
+            let current = settings::load(&handle);
+
+            // macOS: pure menu-bar app, no dock icon.
+            #[cfg(target_os = "macos")]
+            let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Closing the main window must only hide it, not destroy it —
+            // otherwise the last-window-closed event quits the app and the tray
+            // icon disappears. The window stays warm for instant reopen.
+            if let Some(window) = app.get_webview_window("main") {
+                let win = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = win.hide();
+                    }
+                });
+            }
+
+            tray::create_tray(&handle)?;
+
+            // Register the configured global shortcut (non-fatal: a bad or
+            // conflicting shortcut must never prevent the app from starting).
+            match current.shortcut.parse::<Shortcut>() {
+                Ok(sc) => {
+                    if let Err(e) = app.global_shortcut().register(sc) {
+                        eprintln!("Shortcut '{}' nicht registrierbar: {e}", current.shortcut);
+                    }
+                }
+                Err(e) => eprintln!("Ungültiger Shortcut '{}': {e}", current.shortcut),
+            }
+
+            // Apply the saved autostart preference (best-effort).
+            let _ = apply_autostart(&handle, current.autostart);
+
+            // Make sure an Ollama server is running.
+            ollama::ensure_server();
+
+            // Expose settings to commands and the Ollama call.
+            app.manage(AppState {
+                settings: Mutex::new(current),
+            });
+
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

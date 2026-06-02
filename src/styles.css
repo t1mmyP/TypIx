@@ -1,0 +1,238 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #8a8a8a;
+  --border: #e6e6e6;
+  --added-bg: #d7f7df;
+  --added-fg: #096b2e;
+  --removed-bg: #ffe0e0;
+  --removed-fg: #9b1c1c;
+  --accent: #2563eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --fg: #f2f2f2;
+    --muted: #8a8a8a;
+    --border: #333336;
+    --added-bg: #14361f;
+    --added-fg: #5ee08a;
+    --removed-bg: #3a1718;
+    --removed-fg: #ff8d8d;
+    --accent: #5b8dff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  -webkit-user-select: text;
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.empty {
+  color: var(--muted);
+}
+
+kbd {
+  font-family: inherit;
+  background: var(--border);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+
+.stream .cursor {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    opacity: 0;
+  }
+}
+
+.diff .added {
+  background: var(--added-bg);
+  color: var(--added-fg);
+  border-radius: 3px;
+}
+
+.diff .removed {
+  background: var(--removed-bg);
+  color: var(--removed-fg);
+  text-decoration: line-through;
+  border-radius: 3px;
+}
+
+.error {
+  color: var(--removed-fg);
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+/* ---- Settings window ---- */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+.settings h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.settings .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings .field.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+}
+
+.settings .flabel {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.settings .flabel.plain {
+  color: var(--fg);
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.settings input.text {
+  font: inherit;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.settings input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.settings button {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.settings button:hover {
+  border-color: var(--accent);
+}
+
+.settings button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.settings .actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings .actions .status {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+}

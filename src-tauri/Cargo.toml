@@ -1,0 +1,27 @@
+[package]
+name = "typix"
+version = "0.1.0"
+description = "Lokales Textkorrektur-Tool"
+authors = ["Tim Prümer"]
+edition = "2021"
+
+[lib]
+name = "typix_lib"
+crate-type = ["lib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+futures-util = "0.3"
+enigo = "0.3"
+
+[profile.dev]
+incremental = true
