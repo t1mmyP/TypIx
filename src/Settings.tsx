@@ -2,9 +2,15 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+interface ModelConfig {
+  name: string;
+  system_prompt: string;
+}
+
 interface AppSettings {
   shortcut: string;
-  model: string;
+  models: ModelConfig[];
+  selected_model: string;
   autostart: boolean;
 }
 
@@ -46,7 +52,15 @@ function eventKeyToken(e: KeyboardEvent): string | null {
 export default function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [recording, setRecording] = useState(false);
+  const [manualInput, setManualInput] = useState(false);
+  const [manualValue, setManualValue] = useState("");
   const [status, setStatus] = useState("");
+
+  // Apply dark theme class to body for this window.
+  useEffect(() => {
+    document.body.classList.add("settings-page");
+    return () => document.body.classList.remove("settings-page");
+  }, []);
 
   useEffect(() => {
     invoke<AppSettings>("get_settings")
@@ -115,22 +129,117 @@ export default function Settings() {
             onClick={() => {
               setStatus("");
               setRecording(true);
+              setManualInput(false);
             }}
           >
-            {recording ? "Tasten drücken …" : "Ändern"}
+            {recording ? "Tasten drücken …" : "Aufnehmen"}
+          </button>
+          <button
+            onClick={() => {
+              setManualInput((v) => !v);
+              setManualValue(settings.shortcut);
+              setRecording(false);
+              setStatus("");
+            }}
+          >
+            Manuell
+          </button>
+        </div>
+        {manualInput && (
+          <div className="shortcut-manual">
+            <input
+              className="text"
+              value={manualValue}
+              spellCheck={false}
+              placeholder="z.B. Control+Alt+Shift+S"
+              onChange={(e) => setManualValue(e.target.value)}
+            />
+            <button
+              onClick={() => {
+                if (!manualValue.trim()) return;
+                setSettings({ ...settings, shortcut: manualValue.trim() });
+                setManualInput(false);
+                setStatus("");
+              }}
+            >
+              Übernehmen
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="field">
+        <span className="flabel">Modell</span>
+        <div className="shortcut-row">
+          <select
+            className="text"
+            value={settings.selected_model}
+            onChange={(e) =>
+              setSettings({ ...settings, selected_model: e.target.value })
+            }
+          >
+            {settings.models.map((m) => (
+              <option key={m.name} value={m.name}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              const name = prompt("Modell-Name (z.B. mistral:7b)");
+              if (!name?.trim()) return;
+              if (settings.models.find((m) => m.name === name.trim())) return;
+              setSettings({
+                ...settings,
+                models: [
+                  ...settings.models,
+                  { name: name.trim(), system_prompt: "" },
+                ],
+                selected_model: name.trim(),
+              });
+            }}
+          >
+            +
+          </button>
+          <button
+            disabled={settings.models.length <= 1}
+            onClick={() => {
+              const remaining = settings.models.filter(
+                (m) => m.name !== settings.selected_model
+              );
+              setSettings({
+                ...settings,
+                models: remaining,
+                selected_model: remaining[0].name,
+              });
+            }}
+          >
+            −
           </button>
         </div>
       </div>
 
-      <label className="field">
-        <span className="flabel">Modell</span>
-        <input
-          className="text"
-          value={settings.model}
+      <div className="field">
+        <span className="flabel">System-Prompt</span>
+        <textarea
+          className="text prompt-textarea"
+          value={
+            settings.models.find((m) => m.name === settings.selected_model)
+              ?.system_prompt ?? ""
+          }
           spellCheck={false}
-          onChange={(e) => setSettings({ ...settings, model: e.target.value })}
+          onChange={(e) =>
+            setSettings({
+              ...settings,
+              models: settings.models.map((m) =>
+                m.name === settings.selected_model
+                  ? { ...m, system_prompt: e.target.value }
+                  : m
+              ),
+            })
+          }
         />
-      </label>
+      </div>
 
       <label className="field row">
         <input

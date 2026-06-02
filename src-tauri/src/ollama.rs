@@ -6,10 +6,6 @@ use std::time::Duration;
 use tauri::ipc::Channel;
 
 const OLLAMA_URL: &str = "http://127.0.0.1:11434";
-const SYSTEM_PROMPT: &str = "Du bist ein präzises Korrekturwerkzeug für Texte. \
-Korrigiere ausschließlich Rechtschreibung, Grammatik und Zeichensetzung des folgenden Textes. \
-Bewahre Bedeutung, Tonfall, Sprache und Formatierung exakt. Erfinde keine Inhalte und kürze nichts. \
-Gib AUSSCHLIESSLICH den korrigierten Text aus – ohne Erklärungen, ohne Anführungszeichen, ohne Einleitung.";
 
 #[derive(Deserialize)]
 struct GenerateChunk {
@@ -27,13 +23,22 @@ pub async fn correct_text(
     on_chunk: Channel<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
-    // Read the configured model, then drop the lock before any await point.
-    let model = state.settings.lock().unwrap().model.clone();
+    // Read model and system prompt, then drop the lock before any await point.
+    let (model, system_prompt) = {
+        let s = state.settings.lock().unwrap();
+        let prompt = s
+            .models
+            .iter()
+            .find(|m| m.name == s.selected_model)
+            .map(|m| m.system_prompt.clone())
+            .unwrap_or_default();
+        (s.selected_model.clone(), prompt)
+    };
 
     let client = reqwest::Client::new();
     let body = serde_json::json!({
         "model": model,
-        "system": SYSTEM_PROMPT,
+        "system": system_prompt,
         "prompt": text,
         "stream": true,
         "keep_alive": "5m",

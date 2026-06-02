@@ -1,3 +1,4 @@
+mod commands;
 mod ollama;
 mod settings;
 mod tray;
@@ -37,10 +38,46 @@ pub fn trigger_correction<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.emit("correct-request", text);
+            position_on_cursor_monitor(&app, &window);
             let _ = window.show();
             let _ = window.set_focus();
         }
     });
+}
+
+/// Positions `window` in the centre of whichever monitor the mouse cursor is on.
+/// Falls back to the primary monitor if detection fails.
+fn position_on_cursor_monitor<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    window: &tauri::WebviewWindow<R>,
+) {
+    use tauri::PhysicalPosition;
+
+    let Ok(cursor) = app.cursor_position() else { return; };
+    let Ok(monitors) = window.available_monitors() else { return; };
+
+    let monitor = monitors
+        .iter()
+        .find(|m| {
+            let pos = m.position();
+            let size = m.size();
+            cursor.x >= pos.x as f64
+                && cursor.x < pos.x as f64 + size.width as f64
+                && cursor.y >= pos.y as f64
+                && cursor.y < pos.y as f64 + size.height as f64
+        })
+        .or_else(|| monitors.first());
+
+    let Some(monitor) = monitor else { return; };
+
+    let mon_pos = monitor.position();
+    let mon_size = monitor.size();
+    let win_size = window.outer_size().unwrap_or_default();
+
+    let x = mon_pos.x + (mon_size.width as i32 - win_size.width as i32) / 2;
+    let y = mon_pos.y + (mon_size.height as i32 - win_size.height as i32) / 2;
+
+    let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
 /// Simulates the platform copy shortcut so TypIx can grab the current selection
@@ -86,6 +123,38 @@ fn simulate_copy() {
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn simulate_copy() {}
 
+/// Simulates Ctrl+V / Cmd+V to paste into the previously active window.
+#[cfg(target_os = "macos")]
+pub(crate) fn simulate_paste() {
+    use enigo::{
+        Direction::{Click, Press, Release},
+        Enigo, Key, Keyboard, Settings,
+    };
+    let Ok(mut enigo) = Enigo::new(&Settings::default()) else {
+        return;
+    };
+    let _ = enigo.key(Key::Meta, Press);
+    let _ = enigo.key(Key::Unicode('v'), Click);
+    let _ = enigo.key(Key::Meta, Release);
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn simulate_paste() {
+    use enigo::{
+        Direction::{Click, Press, Release},
+        Enigo, Key, Keyboard, Settings,
+    };
+    let Ok(mut enigo) = Enigo::new(&Settings::default()) else {
+        return;
+    };
+    let _ = enigo.key(Key::Control, Press);
+    let _ = enigo.key(Key::Unicode('v'), Click);
+    let _ = enigo.key(Key::Control, Release);
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub(crate) fn simulate_paste() {}
+
 /// Opens (or focuses) the Settings window. Created on demand and routed by its
 /// window label in the frontend; it shares the same bundle as the main window.
 ///
@@ -105,8 +174,8 @@ pub fn open_settings<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         tauri::WebviewUrl::App("index.html".into()),
     )
     .title("TypIx – Einstellungen")
-    .inner_size(440.0, 430.0)
-    .min_inner_size(380.0, 360.0)
+    .inner_size(440.0, 580.0)
+    .min_inner_size(380.0, 480.0)
     .resizable(true)
     .focused(true)
     .center()
@@ -201,6 +270,7 @@ pub fn run() {
             ollama::correct_text,
             settings::get_settings,
             settings::set_settings,
+            commands::accept_correction,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

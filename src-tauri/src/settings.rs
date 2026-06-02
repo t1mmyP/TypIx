@@ -2,14 +2,36 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime, State};
 
+const DEFAULT_SYSTEM_PROMPT: &str = "Du bist ein präzises Korrekturwerkzeug für Texte. \
+Korrigiere ausschließlich Rechtschreibung, Grammatik und Zeichensetzung des folgenden Textes. \
+Bewahre Bedeutung, Tonfall, Sprache und Formatierung exakt. Erfinde keine Inhalte und kürze nichts. \
+Gib AUSSCHLIESSLICH den korrigierten Text aus – ohne Erklärungen, ohne Anführungszeichen, ohne Einleitung.";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelConfig {
+    pub name: String,
+    pub system_prompt: String,
+}
+
+impl ModelConfig {
+    fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            system_prompt: DEFAULT_SYSTEM_PROMPT.to_string(),
+        }
+    }
+}
+
 /// Persisted user settings. `#[serde(default)]` lets partial/older files load.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     /// Global shortcut accelerator, e.g. "Control+Alt+Shift+Super+S" (Hyper+S).
     pub shortcut: String,
-    /// Ollama model tag used for corrections.
-    pub model: String,
+    /// Available models with their individual system prompts.
+    pub models: Vec<ModelConfig>,
+    /// Name of the currently selected model.
+    pub selected_model: String,
     /// Launch TypIx on login.
     pub autostart: bool,
 }
@@ -17,9 +39,12 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            // Hyper key = Control + Option + Shift + Command.
             shortcut: "Control+Alt+Shift+Super+S".to_string(),
-            model: "qwen2.5:3b".to_string(),
+            models: vec![
+                ModelConfig::new("qwen2.5:3b"),
+                ModelConfig::new("llama3.2:3b"),
+            ],
+            selected_model: "qwen2.5:3b".to_string(),
             autostart: false,
         }
     }
