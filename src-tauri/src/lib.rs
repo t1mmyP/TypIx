@@ -51,6 +51,19 @@ pub fn trigger_correction<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
             grabbed
         };
 
+        // Remember which app was frontmost so we can re-activate it on paste.
+        #[cfg(target_os = "macos")]
+        {
+            let frontmost = std::process::Command::new("osascript")
+                .args(["-e", "tell application \"System Events\" to get name of first process whose frontmost is true"])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            *app.state::<AppState>().last_frontmost_app.lock().unwrap() = frontmost;
+        }
+
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.emit("correct-request", text);
             position_on_cursor_monitor(&app, &window);
@@ -95,9 +108,8 @@ fn position_on_cursor_monitor<R: tauri::Runtime>(
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
-/// Simulates Cmd+C via osascript/System Events. Avoids enigo's CGEvent
-/// threading issues on macOS 15+. Synthetic events from System Events carry
-/// only the specified modifier flags, so held shortcut keys don't interfere.
+/// Simulates Cmd+C via enigo on the main thread (required for TIS APIs).
+/// Modifier keys are released first so the shortcut doesn't interfere.
 #[cfg(target_os = "macos")]
 fn simulate_copy() {
     use enigo::{
@@ -144,16 +156,14 @@ fn simulate_copy() {}
 
 #[cfg(target_os = "macos")]
 pub(crate) fn simulate_paste() {
-    use enigo::{
-        Direction::{Click, Press, Release},
-        Enigo, Key, Keyboard, Settings,
-    };
-    let _ = std::panic::catch_unwind(|| {
-        let Ok(mut enigo) = Enigo::new(&Settings::default()) else { return; };
-        let _ = enigo.key(Key::Meta, Press);
-        let _ = enigo.key(Key::Unicode('v'), Click);
-        let _ = enigo.key(Key::Meta, Release);
-    });
+    // Use System Events instead of enigo to avoid CGEvent threading issues on
+    // macOS 15+ and to ensure the keystroke reaches the now-frontmost app.
+    let _ = std::process::Command::new("osascript")
+        .args([
+            "-e",
+            "tell application \"System Events\" to keystroke \"v\" using command down",
+        ])
+        .output();
 }
 
 #[cfg(target_os = "windows")]
@@ -334,6 +344,7 @@ pub fn run() {
             // Expose settings to commands and the Ollama call.
             app.manage(AppState {
                 settings: Mutex::new(current),
+                last_frontmost_app: Mutex::new(None),
             });
 
             Ok(())

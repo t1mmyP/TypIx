@@ -56,6 +56,9 @@ impl Default for Settings {
 /// App-wide state shared with commands and the Ollama call.
 pub struct AppState {
     pub settings: Mutex<Settings>,
+    /// The name of the frontmost app just before TypIx's window appeared.
+    /// Used to re-activate it before simulating paste.
+    pub last_frontmost_app: Mutex<Option<String>>,
 }
 
 fn settings_file<R: Runtime>(app: &AppHandle<R>) -> Result<std::path::PathBuf, String> {
