@@ -137,7 +137,7 @@ html, body, #root {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 8px;
+  padding: 60px;
 }
 
 .d4-wrap::before {
@@ -165,7 +165,9 @@ html, body, #root {
   border-radius: 22px;
   overflow: hidden;
   box-shadow:
-    0 30px 80px -20px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 4px 20px rgba(0, 0, 0, 0.40),
+    0 16px 48px rgba(0, 0, 0, 0.30),
     inset 0 1px 0 rgba(255, 255, 255, 0.10);
   /* Smooth width transitions between states */
   transition: width 0.18s ease;
