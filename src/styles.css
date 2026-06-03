@@ -138,6 +138,7 @@ html, body, #root {
   align-items: flex-start;
   justify-content: center;
   padding: 60px;
+  transition: opacity 0.12s ease;
 }
 
 .d4::before {
@@ -158,9 +159,9 @@ html, body, #root {
   position: relative;
   z-index: 1;
   font-family: var(--font-mono);
-  background: linear-gradient(160deg, rgba(34, 34, 44, 0.92), rgba(18, 18, 24, 0.88));
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  /* No background/backdrop-filter here — lives on ::after so content repaints
+     never invalidate the blur layer. */
+  background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 22px;
   overflow: hidden;
@@ -169,8 +170,20 @@ html, body, #root {
     0 4px 20px rgba(0, 0, 0, 0.40),
     0 16px 48px rgba(0, 0, 0, 0.30),
     inset 0 1px 0 rgba(255, 255, 255, 0.10);
-  /* Smooth width transitions between states */
   transition: width 0.18s ease;
+}
+
+/* Isolated blur + background layer — static, never repainted by content updates */
+.d4::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: linear-gradient(160deg, rgba(34, 34, 44, 0.92), rgba(18, 18, 24, 0.88));
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  z-index: -1;
+  pointer-events: none;
 }
 
 /* Header */

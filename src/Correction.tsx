@@ -29,6 +29,7 @@ export default function Correction() {
   const [error, setError]    = useState("");
   const [model, setModel]    = useState("…");
   const [lots, setLots]      = useState(false);
+  const [ready, setReady]     = useState(false);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
   const [ctxInput, setCtxInput] = useState("");
   const [ctxStatus, setCtxStatus] = useState<"idle" | "saved">("idle");
@@ -37,6 +38,9 @@ export default function Correction() {
   const streamedRef           = useRef("");
   const bodyRef               = useRef<HTMLDivElement>(null);
   const ctxInputRef           = useRef<HTMLInputElement>(null);
+
+  // Fade in once after first paint — hides the transparent-window flash on macOS.
+  useEffect(() => { setReady(true); }, []);
 
   // Fetch active model name for the chip.
   useEffect(() => {
@@ -175,6 +179,7 @@ export default function Correction() {
   return (
     <div
       className="d4-wrap"
+      style={{ opacity: ready ? 1 : 0 }}
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="d4" style={{ width: panelWidth }}>
