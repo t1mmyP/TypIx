@@ -12,6 +12,7 @@ interface AppSettings {
   models: ModelConfig[];
   selected_model: string;
   autostart: boolean;
+  whitelist: string[];
 }
 
 const MOD_SYMBOLS: Record<string, string> = {
@@ -55,6 +56,7 @@ export default function Settings() {
   const [manualInput, setManualInput] = useState(false);
   const [manualValue, setManualValue] = useState("");
   const [status, setStatus] = useState("");
+  const [whitelistInput, setWhitelistInput] = useState("");
 
   // Apply dark theme class to body for this window.
   useEffect(() => {
@@ -239,6 +241,69 @@ export default function Settings() {
             })
           }
         />
+      </div>
+
+      <div className="field">
+        <span className="flabel">Whitelist</span>
+        <div className="whitelist-input-row">
+          <input
+            className="text"
+            value={whitelistInput}
+            placeholder="z.B. iPhone, OpenAI, Tim …"
+            spellCheck={false}
+            onChange={(e) => setWhitelistInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                const word = whitelistInput.trim().replace(/,+$/, "");
+                if (
+                  word &&
+                  !settings.whitelist.includes(word)
+                ) {
+                  setSettings({
+                    ...settings,
+                    whitelist: [...settings.whitelist, word],
+                  });
+                }
+                setWhitelistInput("");
+              }
+            }}
+          />
+          <button
+            onClick={() => {
+              const word = whitelistInput.trim().replace(/,+$/, "");
+              if (word && !settings.whitelist.includes(word)) {
+                setSettings({
+                  ...settings,
+                  whitelist: [...settings.whitelist, word],
+                });
+              }
+              setWhitelistInput("");
+            }}
+          >
+            +
+          </button>
+        </div>
+        {settings.whitelist.length > 0 && (
+          <div className="whitelist-tags">
+            {settings.whitelist.map((word) => (
+              <span key={word} className="whitelist-tag">
+                {word}
+                <button
+                  className="whitelist-tag-remove"
+                  onClick={() =>
+                    setSettings({
+                      ...settings,
+                      whitelist: settings.whitelist.filter((w) => w !== word),
+                    })
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <label className="field row">

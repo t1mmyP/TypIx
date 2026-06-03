@@ -34,6 +34,8 @@ pub struct Settings {
     pub selected_model: String,
     /// Launch TypIx on login.
     pub autostart: bool,
+    /// Words that must never be altered by the correction (e.g. proper nouns).
+    pub whitelist: Vec<String>,
 }
 
 impl Default for Settings {
@@ -46,6 +48,7 @@ impl Default for Settings {
             ],
             selected_model: "qwen2.5:3b".to_string(),
             autostart: false,
+            whitelist: Vec::new(),
         }
     }
 }

@@ -4264,6 +4264,7 @@ version = "0.1.0"
 dependencies = [
  "enigo",
  "futures-util",
+ "image",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

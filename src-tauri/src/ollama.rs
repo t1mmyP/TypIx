@@ -23,16 +23,24 @@ pub async fn correct_text(
     on_chunk: Channel<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
-    // Read model and system prompt, then drop the lock before any await point.
-    let (model, system_prompt) = {
+    // Read model, system prompt, and whitelist, then drop the lock before any await point.
+    let (model, system_prompt, whitelist) = {
         let s = state.settings.lock().unwrap();
-        let prompt = s
+        let mut prompt = s
             .models
             .iter()
             .find(|m| m.name == s.selected_model)
             .map(|m| m.system_prompt.clone())
             .unwrap_or_default();
-        (s.selected_model.clone(), prompt)
+        let whitelist = s.whitelist.clone();
+        if !whitelist.is_empty() {
+            let terms = whitelist.join(", ");
+            prompt.push_str(&format!(
+                "\n\nFolgende Begriffe MUSST du exakt in dieser Schreibweise beibehalten – \
+                ändere sie unter keinen Umständen: {terms}"
+            ));
+        }
+        (s.selected_model.clone(), prompt, whitelist)
     };
 
     let client = reqwest::Client::builder()
@@ -80,13 +88,73 @@ pub async fn correct_text(
                     let _ = on_chunk.send(chunk.response);
                 }
                 if chunk.done {
-                    return Ok(full);
+                    return Ok(restore_whitelist(full, &whitelist));
                 }
             }
         }
     }
 
-    Ok(full)
+    Ok(restore_whitelist(full, &whitelist))
+}
+
+/// Restores all whitelist entries in `text` to their exact spelling.
+/// Handles both single words ("iPhone") and multi-word phrases ("New York").
+/// Longer entries are matched first to avoid partial-match conflicts.
+fn restore_whitelist(text: String, whitelist: &[String]) -> String {
+    if whitelist.is_empty() {
+        return text;
+    }
+    let mut sorted: Vec<&String> = whitelist.iter().filter(|w| !w.trim().is_empty()).collect();
+    sorted.sort_by(|a, b| b.len().cmp(&a.len())); // longest first
+
+    let mut result = text;
+    for term in sorted {
+        result = replace_term(result, term);
+    }
+    result
+}
+
+/// Case-insensitive, word-boundary-aware replacement of `term` in `text`.
+/// Operates on `char` slices so Unicode (umlauts, etc.) is handled correctly.
+fn replace_term(text: String, term: &str) -> String {
+    let tc: Vec<char> = text.chars().collect();
+    let wc: Vec<char> = term.chars().collect();
+    let (tlen, wlen) = (tc.len(), wc.len());
+
+    if wlen == 0 || wlen > tlen {
+        return text;
+    }
+
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+
+    while i + wlen <= tlen {
+        // Case-insensitive character-by-character comparison.
+        let matches = tc[i..i + wlen]
+            .iter()
+            .zip(wc.iter())
+            .all(|(a, b)| a.to_lowercase().eq(b.to_lowercase()));
+
+        if matches {
+            let before_ok = i == 0 || !tc[i - 1].is_alphanumeric();
+            let after_ok = i + wlen >= tlen || !tc[i + wlen].is_alphanumeric();
+
+            if before_ok && after_ok {
+                out.push_str(term);
+                i += wlen;
+                continue;
+            }
+        }
+
+        out.push(tc[i]);
+        i += 1;
+    }
+    while i < tlen {
+        out.push(tc[i]);
+        i += 1;
+    }
+
+    out
 }
 
 /// If nothing is listening on the Ollama port, spawn `ollama serve` in the

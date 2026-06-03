@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import typixIcon from "./assets/typix-icon.svg";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -8,6 +9,8 @@ import { computeDiff, type DiffPart } from "./lib/diff";
 import { Diff } from "./components/Diff";
 
 type Status = "idle" | "streaming" | "done" | "error";
+
+interface CtxMenu { x: number; y: number; word: string }
 
 /**
  * Liefert nur die ersten N Wörter eines Textes (N = Wortanzahl in `streamed`).
@@ -26,10 +29,14 @@ export default function Correction() {
   const [error, setError]    = useState("");
   const [model, setModel]    = useState("…");
   const [lots, setLots]      = useState(false);
-  const correctedRef         = useRef("");
-  const originalRef          = useRef("");   // original text for live diff
-  const streamedRef          = useRef("");   // accumulated stream so far
-  const bodyRef              = useRef<HTMLDivElement>(null);
+  const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
+  const [ctxInput, setCtxInput] = useState("");
+  const [ctxStatus, setCtxStatus] = useState<"idle" | "saved">("idle");
+  const correctedRef          = useRef("");
+  const originalRef           = useRef("");
+  const streamedRef           = useRef("");
+  const bodyRef               = useRef<HTMLDivElement>(null);
+  const ctxInputRef           = useRef<HTMLInputElement>(null);
 
   // Fetch active model name for the chip.
   useEffect(() => {
@@ -65,6 +72,7 @@ export default function Correction() {
 
       setDiff([]);
       setError("");
+      setCtxMenu(null);
       correctedRef.current = "";
       originalRef.current  = text;
       streamedRef.current  = "";
@@ -78,16 +86,12 @@ export default function Correction() {
       try {
         const corrected = await correctText(text, (token) => {
           streamedRef.current += token;
-          // Nur nach einem vollständigen Wort (Leerzeichen im Token) neu diffen.
-          // Dabei nur die bereits verarbeiteten Wörter des Originals vergleichen —
-          // verhindert das rote Chaos durch noch nicht verarbeiteten Originaltext.
           if (/\s/.test(token)) {
             const partial = processedOriginal(originalRef.current, streamedRef.current);
             setDiff(computeDiff(partial, streamedRef.current));
           }
         });
         correctedRef.current = corrected;
-        // Final diff from the authoritative return value.
         setDiff(computeDiff(text, corrected));
         setStatus("done");
       } catch (e) {
@@ -101,13 +105,12 @@ export default function Correction() {
   // Tastatur: Enter = ersetzen, Shift+Enter = nur kopieren, Esc = abbrechen.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (ctxMenu) return; // context menu handles its own keys
       if (e.key === "Enter" && status === "done") {
         e.preventDefault();
         if (e.shiftKey) {
-          // Nur in Zwischenablage kopieren, nicht einfügen.
           writeText(correctedRef.current).finally(() => getCurrentWindow().hide());
         } else {
-          // Korrigierten Text direkt in die Quelle einfügen.
           invoke("accept_correction", { text: correctedRef.current });
         }
       } else if (e.key === "Escape") {
@@ -117,7 +120,49 @@ export default function Correction() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [status]);
+  }, [status, ctxMenu]);
+
+  // Close context menu on outside click.
+  useEffect(() => {
+    if (!ctxMenu) return;
+    function onMouseDown(e: MouseEvent) {
+      const menu = document.querySelector(".ctx-menu");
+      if (menu && !menu.contains(e.target as Node)) setCtxMenu(null);
+    }
+    window.addEventListener("mousedown", onMouseDown);
+    return () => window.removeEventListener("mousedown", onMouseDown);
+  }, [ctxMenu]);
+
+  // Focus input when context menu opens.
+  useEffect(() => {
+    if (ctxMenu) {
+      setCtxStatus("idle");
+      ctxInputRef.current?.focus();
+      ctxInputRef.current?.select();
+    }
+  }, [ctxMenu]);
+
+  function openCtxMenu(word: string, x: number, y: number) {
+    setCtxInput(word);
+    setCtxMenu({ x, y, word });
+  }
+
+  async function addToWhitelist() {
+    const word = ctxInput.trim();
+    if (!word) return;
+    try {
+      const s = await invoke<{ whitelist: string[] } & Record<string, unknown>>("get_settings");
+      if (!s.whitelist.includes(word)) {
+        await invoke("set_settings", {
+          settings: { ...s, whitelist: [...s.whitelist, word] },
+        });
+      }
+      setCtxStatus("saved");
+      setTimeout(() => setCtxMenu(null), 700);
+    } catch {
+      setCtxMenu(null);
+    }
+  }
 
   const isIdle      = status === "idle";
   const isStreaming = status === "streaming";
@@ -128,10 +173,13 @@ export default function Correction() {
   const panelWidth = isIdle ? 360 : lots ? 560 : 520;
 
   return (
-    <div className="d4-wrap">
+    <div
+      className="d4-wrap"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div className="d4" style={{ width: panelWidth }}>
 
-        {/* ── Idle: Hinweis dass kein Text erfasst wurde ── */}
+        {/* ── Idle ── */}
         {isIdle && (
           <div className="d4-idle">
             <p>Text auswählen, dann Shortcut drücken.</p>
@@ -139,29 +187,28 @@ export default function Correction() {
           </div>
         )}
 
-        {/* ── Active (Streaming + Done): Header bleibt, Body + Footer wechseln ──
-            key="active" → dieses div mountet neu wenn wir von idle kommen → Bloom-Animation.
-            Zwischen streaming↔done bleibt es gemountet → kein erneuter Bloom. ── */}
+        {/* ── Active (Streaming + Done) ── */}
         {isActive && (
           <div key="active" className="d4-active">
             <div className="d4-head">
-              <div className="d4-brand"><span className="d4-logo" />TypIx</div>
+              <div className="d4-brand"><img src={typixIcon} className="d4-logo" alt="" />TypIx</div>
               <span className="modelchip"><span className="led" />{model}</span>
             </div>
 
-            {/* Body: Diff wird live während des Streamens aktualisiert */}
             <div
               ref={bodyRef}
               className={`d4-body${lots ? " scrolls" : ""}`}
               style={lots ? { maxHeight: 250 } : undefined}
             >
               <p className="d4-text">
-                <Diff parts={diff} />
+                <Diff
+                  parts={diff}
+                  onWordContextMenu={isDone ? openCtxMenu : undefined}
+                />
                 {isStreaming && <span className="d4-cursor" />}
               </p>
             </div>
 
-            {/* Footer: Dots während Stream, Keyboard-Hints wenn fertig */}
             <div className="d4-foot">
               {isStreaming ? (
                 <span className="dots d4-dots-sm"><i /><i /><i /></span>
@@ -187,6 +234,39 @@ export default function Correction() {
         )}
 
       </div>
+
+      {/* ── Context Menu ── */}
+      {ctxMenu && (
+        <div
+          className="ctx-menu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+        >
+          {ctxStatus === "saved" ? (
+            <div className="ctx-menu-saved">✓ Gespeichert</div>
+          ) : (
+            <>
+              <div className="ctx-menu-label">Zur Whitelist hinzufügen</div>
+              <div className="ctx-menu-row">
+                <input
+                  ref={ctxInputRef}
+                  className="ctx-menu-input"
+                  value={ctxInput}
+                  spellCheck={false}
+                  onChange={(e) => setCtxInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === "Enter") addToWhitelist();
+                    if (e.key === "Escape") setCtxMenu(null);
+                  }}
+                />
+                <button className="ctx-menu-btn" onClick={addToWhitelist}>
+                  +
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

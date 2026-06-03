@@ -11,8 +11,17 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let quit_i = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&correct_i, &settings_i, &quit_i])?;
 
+    let png_bytes = include_bytes!("../icons/32x32.png");
+    let img = image::load_from_memory_with_format(png_bytes, image::ImageFormat::Png)
+        .expect("tray icon laden fehlgeschlagen");
+    let icon = tauri::image::Image::new_owned(
+        img.to_rgba8().into_raw(),
+        img.width(),
+        img.height(),
+    );
+
     let _tray = TrayIconBuilder::with_id("main")
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(icon)
         .tooltip("TypIx")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
