@@ -121,10 +121,10 @@ export default function Settings() {
 
   return (
     <div className="settings">
-      <h1>Einstellungen</h1>
+      <h1>Settings</h1>
 
       <div className="field">
-        <span className="flabel">Globaler Shortcut</span>
+        <span className="flabel">Global Shortcut</span>
         <div className="shortcut-row">
           <code className="shortcut">{prettyShortcut(settings.shortcut)}</code>
           <button
@@ -134,7 +134,7 @@ export default function Settings() {
               setManualInput(false);
             }}
           >
-            {recording ? "Tasten drücken …" : "Aufnehmen"}
+            {recording ? "Press keys …" : "Record"}
           </button>
           <button
             onClick={() => {
@@ -164,7 +164,7 @@ export default function Settings() {
                 setStatus("");
               }}
             >
-              Übernehmen
+              Apply
             </button>
           </div>
         )}
@@ -314,14 +314,14 @@ export default function Settings() {
             setSettings({ ...settings, autostart: e.target.checked })
           }
         />
-        <span className="flabel plain">Beim Anmelden automatisch starten</span>
+        <span className="flabel plain">Launch at login</span>
       </label>
 
       <div className="actions">
         <span className="status">{status}</span>
-        <button onClick={() => getCurrentWindow().close()}>Schließen</button>
+        <button onClick={() => getCurrentWindow().close()}>Close</button>
         <button className="primary" onClick={save}>
-          Speichern
+          Save
         </button>
       </div>
     </div>

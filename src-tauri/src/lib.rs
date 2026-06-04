@@ -201,7 +201,7 @@ pub fn open_settings<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         "settings",
         tauri::WebviewUrl::App("index.html".into()),
     )
-    .title("TypIx – Einstellungen")
+    .title("TypIx – Settings")
     .inner_size(440.0, 580.0)
     .min_inner_size(380.0, 480.0)
     .resizable(true)
@@ -240,7 +240,7 @@ pub fn open_settings<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 
             let _ = window.set_focus();
         }
-        Err(e) => eprintln!("Settings-Fenster konnte nicht geöffnet werden: {e}"),
+        Err(e) => eprintln!("Could not open settings window: {e}"),
     }
 }
 
@@ -253,7 +253,7 @@ pub fn apply_shortcut<R: tauri::Runtime>(
 ) -> Result<(), String> {
     let new_sc = new
         .parse::<Shortcut>()
-        .map_err(|e| format!("Ungültiger Shortcut: {e}"))?;
+        .map_err(|e| format!("Invalid shortcut: {e}"))?;
     app.global_shortcut()
         .register(new_sc)
         .map_err(|e| format!("Shortcut konnte nicht registriert werden: {e}"))?;
@@ -332,7 +332,7 @@ pub fn run() {
                         eprintln!("Shortcut '{}' nicht registrierbar: {e}", current.shortcut);
                     }
                 }
-                Err(e) => eprintln!("Ungültiger Shortcut '{}': {e}", current.shortcut),
+                Err(e) => eprintln!("Invalid shortcut '{}': {e}", current.shortcut),
             }
 
             // Apply the saved autostart preference (best-effort).

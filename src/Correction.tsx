@@ -187,7 +187,7 @@ export default function Correction() {
         {/* ── Idle ── */}
         {isIdle && (
           <div className="d4-idle">
-            <p>Text auswählen, dann Shortcut drücken.</p>
+            <p>Select text, then press shortcut.</p>
             <span className="modelchip"><span className="led" />{model}</span>
           </div>
         )}
@@ -250,7 +250,7 @@ export default function Correction() {
             <div className="ctx-menu-saved">✓ Gespeichert</div>
           ) : (
             <>
-              <div className="ctx-menu-label">Zur Whitelist hinzufügen</div>
+              <div className="ctx-menu-label">Add to whitelist</div>
               <div className="ctx-menu-row">
                 <input
                   ref={ctxInputRef}

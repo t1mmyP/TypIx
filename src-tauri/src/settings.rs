@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime, State};
 
-const DEFAULT_SYSTEM_PROMPT: &str = "Du bist ein präzises Korrekturwerkzeug für Texte. \
-Korrigiere ausschließlich Rechtschreibung, Grammatik und Zeichensetzung des folgenden Textes. \
-Bewahre Bedeutung, Tonfall, Sprache und Formatierung exakt. Erfinde keine Inhalte und kürze nichts. \
-Gib AUSSCHLIESSLICH den korrigierten Text aus – ohne Erklärungen, ohne Anführungszeichen, ohne Einleitung.";
+const DEFAULT_SYSTEM_PROMPT: &str = "You are a precise text correction tool. \
+Correct only spelling, grammar, and punctuation in the following text. \
+Preserve meaning, tone, language, and formatting exactly. Do not invent content or shorten anything. \
+Output ONLY the corrected text – no explanations, no quotation marks, no introduction.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelConfig {
