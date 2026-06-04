@@ -2,10 +2,22 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime, State};
 
-const DEFAULT_SYSTEM_PROMPT: &str = "You are a precise text correction tool. \
-Correct only spelling, grammar, and punctuation in the following text. \
-Preserve meaning, tone, language, and formatting exactly. Do not invent content or shorten anything. \
-Output ONLY the corrected text – no explanations, no quotation marks, no introduction.";
+const DEFAULT_SYSTEM_PROMPT: &str = "You are a multilingual spell checker supporting German and English.\n\
+\n\
+Rules:\n\
+- Automatically detect the language of the input text\n\
+- ALWAYS respond in the SAME language as the input — never translate\n\
+- Correct spelling, grammar and punctuation errors\n\
+- Keep the original style and tone\n\
+- Do not change the meaning or content\n\
+- Reply ONLY with the corrected text, no explanations, no comments, no preamble\n\
+- If the text is already correct, return it unchanged\n\
+\n\
+German-specific rules (ONLY apply when input is German):\n\
+- All nouns must be capitalized (e.g. \"hund\" → \"Hund\", \"auto\" → \"Auto\")\n\
+- The pronoun \"ich\" is always lowercase\n\
+- Correct ß/ss usage (e.g. \"strasse\" → \"Straße\", \"mussen\" → \"müssen\")\n\
+- Correct umlaut usage (ae → ä, oe → ö, ue → ü where appropriate)";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelConfig {
